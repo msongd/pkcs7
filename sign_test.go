@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 func TestSign(t *testing.T) {
@@ -393,4 +394,41 @@ func fromHex(s string) *big.Int {
 		panic(s)
 	}
 	return result
+}
+
+func TestSkipSigningTime(t *testing.T) {
+	cert, err := createTestCertificate(x509.SHA256WithRSA)
+	if err != nil {
+		t.Fatalf("Cannot create test certificates: %s", err)
+	}
+
+	for _, skip := range []bool{false, true} {
+		signedData, err := NewSignedData([]byte("Example data to be signed"))
+		if err != nil {
+			t.Fatalf("Cannot initialize signed data: %s", err)
+		}
+		if err := signedData.AddSigner(cert.Certificate, *cert.PrivateKey, SignerInfoConfig{SkipSigningTime: skip}); err != nil {
+			t.Fatalf("Cannot add signer: %s", err)
+		}
+		detachedSignature, err := signedData.Finish()
+		if err != nil {
+			t.Fatalf("Cannot finish signing data: %s", err)
+		}
+
+		p7, err := Parse(detachedSignature)
+		if err != nil {
+			t.Fatalf("Cannot parse signed data: %s", err)
+		}
+		var signingTime time.Time
+		err = unmarshalAttribute(p7.Signers[0].AuthenticatedAttributes, OIDAttributeSigningTime, &signingTime)
+		if skip && err == nil {
+			t.Errorf("SkipSigningTime=true: signingTime attribute present (%s), want absent", signingTime)
+		}
+		if !skip && err != nil {
+			t.Errorf("SkipSigningTime=false: signingTime attribute missing: %s", err)
+		}
+		if err := p7.Verify(); err != nil {
+			t.Errorf("SkipSigningTime=%v: signature does not verify: %s", skip, err)
+		}
+	}
 }

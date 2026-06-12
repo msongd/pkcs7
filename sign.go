@@ -48,6 +48,11 @@ type SignerInfoConfig struct {
 	ExtraSignedAttributes   []Attribute
 	ExtraUnsignedAttributes []Attribute
 	SkipCertificates        bool
+	// SkipSigningTime omits the signingTime signed attribute. CAdES baseline
+	// profiles (ETSI EN 319 122-1; used by PAdES, ETSI EN 319 142-1) forbid
+	// signing-time as a signed attribute: the signing time is carried by a
+	// signature time-stamp or the enclosing format instead.
+	SkipSigningTime bool
 }
 
 type signedData struct {
@@ -163,7 +168,9 @@ func (sd *SignedData) AddSignerChain(ee *x509.Certificate, keyOrSigner interface
 	attrs := &attributes{}
 	attrs.Add(OIDAttributeContentType, sd.sd.ContentInfo.ContentType)
 	attrs.Add(OIDAttributeMessageDigest, sd.messageDigest)
-	attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	if !config.SkipSigningTime {
+		attrs.Add(OIDAttributeSigningTime, time.Now().UTC())
+	}
 	for _, attr := range config.ExtraSignedAttributes {
 		attrs.Add(attr.Type, attr.Value)
 	}
